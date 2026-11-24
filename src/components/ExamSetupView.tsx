@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  AlertCircle,
   ArrowRight,
   BadgeCheck,
   Eye,
@@ -14,10 +15,15 @@ import {
   ExamAttempt,
   GRADES,
   Grade,
+  IdActivationRecord,
   ROUNDS,
   RoundLevel,
 } from '../types/vioedu';
-import { isValidAccountPass, parseStudentId } from '../utils/studentId';
+import {
+  getActivationStatus,
+  isValidAccountPass,
+  parseStudentId,
+} from '../utils/studentId';
 
 const HERO_IMAGE_PATH = '/src/assets/images/hero_vioedu_arena_1795501207398.jpg';
 
@@ -99,6 +105,8 @@ interface ExamSetupViewProps {
   studentPass: string;
   onStudentPassChange: (pass: string) => void;
   selectedGrade: Grade;
+  lockedGrade: Grade | null;
+  activationRecord: IdActivationRecord | null;
   onSelectGrade: (grade: Grade) => void;
   selectedRound: RoundLevel;
   onSelectRound: (round: RoundLevel) => void;
@@ -117,6 +125,8 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
   studentPass,
   onStudentPassChange,
   selectedGrade,
+  lockedGrade,
+  activationRecord,
   onSelectGrade,
   selectedRound,
   onSelectRound,
@@ -134,18 +144,20 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
 
   const parsedId = parseStudentId(studentId);
   const passValid = isValidAccountPass(studentPass);
+  const activationStatus = getActivationStatus(activationRecord);
+  const isExpired = Boolean(activationStatus?.isExpired);
   const activeRoundMeta = ROUNDS.find((r) => r.level === selectedRound) || ROUNDS[0];
 
   const handleStartClick = () => {
     const missingName = !studentName.trim();
-    const invalidId = studentId.trim().length > 0 && !parsedId.isValid;
+    const invalidId = !parsedId.isValid;
     const invalidPass = !passValid;
 
     setNameError(missingName);
     setIdError(invalidId);
     setPassError(invalidPass);
 
-    if (missingName || invalidId || invalidPass) {
+    if (missingName || invalidId || invalidPass || isExpired) {
       return;
     }
     onStartExam();
@@ -166,7 +178,7 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
             </h1>
           </div>
 
-          {/* Step 1: Tên bé, ID & Pass (no example placeholders) */}
+          {/* Step 1: Tên bé, ID & Pass */}
           <div className="space-y-2.5">
             <span className="block text-sm font-bold text-slate-800">
               1. Thông tin thí sinh
@@ -230,24 +242,32 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                     }}
                     autoComplete="off"
                     className={`w-full pl-10 pr-3.5 py-3 text-sm sm:text-base font-mono bg-violet-50/50 border-2 rounded-2xl text-slate-900 font-bold transition-colors focus:bg-white ${
-                      idError || (studentId.trim().length > 0 && !parsedId.isValid)
+                      idError || isExpired || (studentId.trim().length > 0 && !parsedId.isValid)
                         ? 'border-rose-400 focus:border-rose-500'
-                        : parsedId.isValid
+                        : parsedId.isValid && passValid
                         ? 'border-emerald-400 focus:border-emerald-500'
                         : 'border-violet-200 focus:border-violet-500'
                     }`}
                   />
                 </div>
-                {parsedId.isValid && passValid ? (
+                {isExpired && activationStatus ? (
+                  <p className="text-xs font-semibold text-rose-600">
+                    Hết hạn ({activationStatus.expiresDateStr})
+                  </p>
+                ) : parsedId.isValid && passValid ? (
                   <p className="text-xs font-semibold text-emerald-700 inline-flex items-center gap-1">
                     <BadgeCheck className="w-3.5 h-3.5 shrink-0" />
                     <span>
-                      {parsedId.isAdmin ? 'Quyền Quản trị' : `Lớp ${parsedId.grade}`}
+                      {parsedId.isAdmin
+                        ? 'Quyền Quản trị'
+                        : activationStatus
+                        ? `Lớp ${parsedId.grade} · Hạn ${activationStatus.expiresDateStr}`
+                        : `Lớp ${parsedId.grade}`}
                     </span>
                   </p>
-                ) : studentId.trim().length > 0 && !parsedId.isValid ? (
+                ) : idError || (studentId.trim().length > 0 && !parsedId.isValid) ? (
                   <p className="text-xs font-semibold text-rose-600">
-                    ID chưa đúng định dạng.
+                    Vui lòng nhập đúng ID.
                   </p>
                 ) : null}
               </div>
@@ -309,30 +329,59 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                 ) : null}
               </div>
             </div>
+
+            {isExpired && activationStatus && (
+              <div className="flex items-start gap-2 text-xs font-semibold text-rose-800 bg-rose-50 border border-rose-200 rounded-2xl p-3">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>
+                  Tài khoản ID <span className="font-mono">{parsedId.normalized}</span> đã hết thời hạn 1 năm kể từ ngày kích hoạt ({activationStatus.activatedDateStr} – {activationStatus.expiresDateStr}).
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Step 2: Lớp */}
+          {/* Step 2: Lớp (locked strictly to student's ID grade for 1 year) */}
           <div className="space-y-3">
-            <div className="flex items-baseline justify-between gap-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="text-sm font-bold text-slate-800">2. Lớp</span>
-              <span className="text-xs font-semibold text-emerald-700">
-                {selectedGrade <= 5 ? 'Khối Tiểu học' : 'Khối THCS'}
-              </span>
+              {lockedGrade !== null && activationStatus ? (
+                <span className="text-xs font-semibold text-emerald-700 tabular-nums">
+                  Chỉ dùng Lớp {lockedGrade} · Hạn dùng 1 năm đến {activationStatus.expiresDateStr}
+                </span>
+              ) : (
+                <span className="text-xs font-semibold text-emerald-700">
+                  {selectedGrade <= 5 ? 'Khối Tiểu học' : 'Khối THCS'}
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-9 gap-2">
               {GRADES.map((g) => {
                 const active = selectedGrade === g;
+                const isLockedOther = lockedGrade !== null && lockedGrade !== g;
                 const styles = GRADE_STYLES[g];
                 return (
                   <button
                     key={g}
                     type="button"
-                    onClick={() => onSelectGrade(g)}
-                    className={`min-h-[46px] px-2 py-2 rounded-2xl border-2 border-b-4 text-sm font-extrabold transition-all tabular-nums whitespace-nowrap active:translate-y-px ${
-                      active ? styles.active : styles.idle
+                    disabled={isLockedOther}
+                    onClick={() => {
+                      if (!isLockedOther) onSelectGrade(g);
+                    }}
+                    title={
+                      isLockedOther
+                        ? `ID hiện tại chỉ dùng cho Lớp ${lockedGrade}`
+                        : `Chọn Lớp ${g}`
+                    }
+                    className={`min-h-[46px] px-2 py-2 rounded-2xl border-2 border-b-4 text-sm font-extrabold transition-all tabular-nums whitespace-nowrap flex items-center justify-center gap-1 ${
+                      isLockedOther
+                        ? 'bg-slate-100 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed'
+                        : active
+                        ? `${styles.active} active:translate-y-px`
+                        : `${styles.idle} active:translate-y-px`
                     }`}
                   >
-                    Lớp {g}
+                    {isLockedOther && <Lock className="w-3 h-3 shrink-0" />}
+                    <span>Lớp {g}</span>
                   </button>
                 );
               })}
@@ -416,7 +465,9 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
           <div className="p-6 flex-1 flex flex-col justify-between space-y-5">
             <div className="bg-gradient-to-br from-emerald-50 via-sky-50 to-amber-50 border-2 border-emerald-200/70 rounded-2xl p-4 space-y-1.5">
               <p className="text-xs font-bold text-emerald-700">
-                Sẵn sàng vào phòng thi
+                {activationStatus && !isExpired && lockedGrade !== null
+                  ? `Hiệu lực đến ${activationStatus.expiresDateStr} (còn ${activationStatus.daysLeft} ngày)`
+                  : 'Sẵn sàng vào phòng thi'}
               </p>
               <p className="font-display text-lg font-extrabold text-slate-900">
                 Lớp {selectedGrade} · {activeRoundMeta.roundName}
@@ -430,10 +481,11 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
               <button
                 type="button"
                 onClick={handleStartClick}
-                className="w-full min-h-[54px] px-5 py-3.5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 hover:from-orange-600 hover:to-amber-600 text-white text-base font-extrabold rounded-2xl border-b-4 border-orange-700 flex items-center justify-center gap-2 transition-all active:translate-y-px shadow-sm"
+                disabled={isExpired}
+                className="w-full min-h-[54px] px-5 py-3.5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 hover:from-orange-600 hover:to-amber-600 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white text-base font-extrabold rounded-2xl border-b-4 border-orange-700 disabled:border-slate-400 flex items-center justify-center gap-2 transition-all active:translate-y-px shadow-sm"
               >
-                <span>Bắt đầu làm bài</span>
-                <ArrowRight className="w-5 h-5" />
+                <span>{isExpired ? 'ID đã hết hạn sử dụng' : 'Bắt đầu làm bài'}</span>
+                {!isExpired && <ArrowRight className="w-5 h-5" />}
               </button>
 
               <button

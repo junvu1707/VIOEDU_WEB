@@ -13,6 +13,7 @@ import {
   ExamSourceSummary,
   GitHubSyncStatus,
   Grade,
+  IdActivationRecord,
   LocalFileImportRecord,
   Question,
   RoundLevel,
@@ -29,17 +30,24 @@ import {
   loadCustomLinks,
   loadExamHistory,
   loadGitHubRepoUrl,
+  loadIdActivations,
   loadLocalFiles,
   loadStudentId,
   loadStudentName,
   saveCustomLinks,
   saveExamHistory,
   saveGitHubRepoUrl,
+  saveIdActivations,
   saveLocalFiles,
   saveStudentId,
   saveStudentName,
 } from './utils/storage';
-import { isValidAccountPass, parseStudentId } from './utils/studentId';
+import {
+  createOneYearActivation,
+  getActivationStatus,
+  isValidAccountPass,
+  parseStudentId,
+} from './utils/studentId';
 
 interface ActiveExamSession {
   studentName: string;
@@ -65,6 +73,10 @@ export default function App() {
       return '';
     }
   });
+  const [idActivations, setIdActivations] = useState<
+    Record<string, IdActivationRecord>
+  >(() => loadIdActivations());
+
   const [selectedGrade, setSelectedGrade] = useState<Grade>(() => {
     const initialParsed = parseStudentId(loadStudentId());
     return initialParsed.grade ?? 4;
@@ -74,8 +86,47 @@ export default function App() {
 
   const parsedId = useMemo(() => parseStudentId(studentId), [studentId]);
   const isPassValid = useMemo(() => isValidAccountPass(studentPass), [studentPass]);
-  const isAuthenticated = parsedId.isValid && isPassValid;
+
+  // First-time activation (valid for 1 year) when student enters valid ID + Pass
+  useEffect(() => {
+    if (parsedId.isValid && !parsedId.isAdmin && parsedId.grade && isPassValid) {
+      setIdActivations((prev) => {
+        if (prev[parsedId.normalized]) return prev;
+        const record = createOneYearActivation(
+          parsedId.normalized,
+          parsedId.grade as Grade
+        );
+        const next = { ...prev, [parsedId.normalized]: record };
+        saveIdActivations(next);
+        return next;
+      });
+    }
+  }, [parsedId.isValid, parsedId.isAdmin, parsedId.grade, parsedId.normalized, isPassValid]);
+
+  const currentActivation: IdActivationRecord | null = useMemo(() => {
+    if (!parsedId.isValid || parsedId.isAdmin || !isPassValid) return null;
+    return idActivations[parsedId.normalized] ?? null;
+  }, [parsedId.isValid, parsedId.isAdmin, parsedId.normalized, isPassValid, idActivations]);
+
+  const activationStatus = useMemo(
+    () => getActivationStatus(currentActivation),
+    [currentActivation]
+  );
+
+  const isIdExpired = Boolean(activationStatus?.isExpired);
   const isAdmin = parsedId.isAdmin && isPassValid;
+  const isAuthenticated = parsedId.isValid && isPassValid && !isIdExpired;
+
+  // Student IDs are strictly locked to their own grade once authenticated
+  const lockedGrade: Grade | null =
+    !isAdmin && isAuthenticated && parsedId.grade ? parsedId.grade : null;
+
+  // Always enforce lockedGrade on selectedGrade
+  useEffect(() => {
+    if (lockedGrade !== null && selectedGrade !== lockedGrade) {
+      setSelectedGrade(lockedGrade);
+    }
+  }, [lockedGrade, selectedGrade]);
 
   // Question banks
   const [githubQuestions, setGithubQuestions] = useState<Question[]>([]);
@@ -86,7 +137,7 @@ export default function App() {
     lastSyncedAt: null,
     filesLoaded: [],
     questionCount: 0,
-    message: 'Nhập đúng ID để tự động tải đề từ GitHub.',
+    message: 'Nhập đúng ID và Pass để tự động tải đề từ GitHub.',
   }));
 
   const [localFiles, setLocalFiles] = useState<LocalFileImportRecord[]>(() =>
@@ -125,7 +176,7 @@ export default function App() {
     []
   );
 
-  // Automatically load exam bank from GitHub ONLY when both ID and Pass are valid
+  // Automatically load exam bank from GitHub ONLY when ID + Pass are valid and not expired
   useEffect(() => {
     if (isAuthenticated) {
       void performGitHubSync();
@@ -136,10 +187,12 @@ export default function App() {
         status: 'idle',
         filesLoaded: [],
         questionCount: 0,
-        message: 'Nhập đúng ID và Pass để tự động tải đề từ GitHub.',
+        message: isIdExpired
+          ? 'ID đã hết hạn sử dụng 1 năm.'
+          : 'Nhập đúng ID và Pass để tự động tải đề từ GitHub.',
       }));
     }
-  }, [isAuthenticated, parsedId.normalized, performGitHubSync]);
+  }, [isAuthenticated, isIdExpired, parsedId.normalized, performGitHubSync]);
 
   // Ensure non-admin users cannot stay on the Question Bank tab
   useEffect(() => {
@@ -169,6 +222,20 @@ export default function App() {
     } catch {
       // ignore sessionStorage errors
     }
+  };
+
+  const handleSelectGrade = (grade: Grade) => {
+    if (lockedGrade !== null && grade !== lockedGrade) return;
+    setSelectedGrade(grade);
+  };
+
+  const handleResetIdActivation = (normalizedId: string) => {
+    setIdActivations((prev) => {
+      const next = { ...prev };
+      delete next[normalizedId];
+      saveIdActivations(next);
+      return next;
+    });
   };
 
   const handleUpdateGitHubConfig = (repoUrl: string, customLinks: string[]) => {
@@ -206,7 +273,9 @@ export default function App() {
     overrideGrade?: Grade,
     overrideRound?: RoundLevel
   ) => {
-    const grade = overrideGrade ?? selectedGrade;
+    if (!isAuthenticated) return;
+
+    const grade = lockedGrade ?? overrideGrade ?? selectedGrade;
     const round = overrideRound ?? selectedRound;
     const cleanName = studentName.trim() || 'Thí sinh nhí';
     if (!studentName.trim()) {
@@ -229,7 +298,7 @@ export default function App() {
     setViewingAttempt(null);
     setActiveExam({
       studentName: cleanName,
-      studentId: parsedId.isValid ? parsedId.normalized : undefined,
+      studentId: parsedId.normalized,
       grade,
       round,
       subjectFilter: 'all',
@@ -246,7 +315,7 @@ export default function App() {
     if (wrongQuestions.length === 0) return;
     const refAttempt = viewingAttempt;
     const cleanName = refAttempt?.studentName || studentName.trim() || 'Thí sinh nhí';
-    const grade = refAttempt?.grade || selectedGrade;
+    const grade = lockedGrade ?? refAttempt?.grade ?? selectedGrade;
     const round = refAttempt?.round || selectedRound;
 
     const sourceSummary: ExamSourceSummary = {
@@ -345,7 +414,7 @@ export default function App() {
   };
 
   const handleJumpToExamFromBank = (grade: Grade, round: RoundLevel) => {
-    setSelectedGrade(grade);
+    setSelectedGrade(lockedGrade ?? grade);
     setSelectedRound(round);
     setViewingAttempt(null);
     setActiveTab('setup');
@@ -359,7 +428,7 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    if (!studentName.trim() || !isPassValid || (studentId.trim().length > 0 && !parsedId.isValid)) {
+    if (!studentName.trim() || !isAuthenticated) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -415,7 +484,9 @@ export default function App() {
           studentPass={studentPass}
           onStudentPassChange={handleStudentPassChange}
           selectedGrade={selectedGrade}
-          onSelectGrade={setSelectedGrade}
+          lockedGrade={lockedGrade}
+          activationRecord={currentActivation}
+          onSelectGrade={handleSelectGrade}
           selectedRound={selectedRound}
           onSelectRound={setSelectedRound}
           onStartExam={() => startCompetitionExam()}
@@ -438,6 +509,8 @@ export default function App() {
           onDeleteLocalFile={handleDeleteLocalFile}
           onClearLocalFiles={handleClearLocalFiles}
           onJumpToExam={handleJumpToExamFromBank}
+          idActivations={idActivations}
+          onResetIdActivation={handleResetIdActivation}
         />
       ) : (
         <HistoryView

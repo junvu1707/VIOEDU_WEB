@@ -1,9 +1,10 @@
 import { DEFAULT_GITHUB_REPO } from '../services/githubBank';
-import { ExamAttempt, LocalFileImportRecord } from '../types/vioedu';
+import { ExamAttempt, IdActivationRecord, LocalFileImportRecord } from '../types/vioedu';
 
 const KEYS = {
   STUDENT_NAME: 'dttt_student_name_v1',
   STUDENT_ID: 'dttt_student_id_v1',
+  ID_ACTIVATIONS: 'dttt_id_activations_v1',
   HISTORY: 'vioedu_exam_history_v1',
   LOCAL_FILES: 'vioedu_local_files_v1',
   GITHUB_REPO: 'vioedu_github_repo_v1',
@@ -37,6 +38,29 @@ export function loadStudentId(): string {
 export function saveStudentId(id: string): void {
   try {
     localStorage.setItem(KEYS.STUDENT_ID, id);
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+export function loadIdActivations(): Record<string, IdActivationRecord> {
+  try {
+    const raw = localStorage.getItem(KEYS.ID_ACTIVATIONS);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object'
+      ? (parsed as Record<string, IdActivationRecord>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveIdActivations(
+  records: Record<string, IdActivationRecord>
+): void {
+  try {
+    localStorage.setItem(KEYS.ID_ACTIVATIONS, JSON.stringify(records));
   } catch {
     // ignore storage quota errors
   }

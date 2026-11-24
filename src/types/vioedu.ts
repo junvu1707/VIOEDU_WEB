@@ -230,6 +230,13 @@ export interface LocalFileImportRecord {
   questions: Question[];
 }
 
+export interface IdActivationRecord {
+  id: string; // e.g. 'l4_001'
+  grade: Grade;
+  activatedAt: string; // ISO date of first valid login
+  expiresAt: string; // ISO date exactly 1 year after activatedAt
+}
+
 export interface GitHubSyncStatus {
   repoUrl: string;
   customLinks: string[];

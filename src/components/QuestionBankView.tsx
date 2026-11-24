@@ -15,6 +15,7 @@ import {
   GRADES,
   GitHubSyncStatus,
   Grade,
+  IdActivationRecord,
   LocalFileImportRecord,
   Question,
   ROUNDS,
@@ -24,6 +25,7 @@ import {
   generateSampleJsonTemplate,
   parseQuestionsPayload,
 } from '../utils/questionParser';
+import { getActivationStatus } from '../utils/studentId';
 
 interface QuestionBankViewProps {
   githubQuestions: Question[];
@@ -35,6 +37,8 @@ interface QuestionBankViewProps {
   onDeleteLocalFile: (fileId: string) => void;
   onClearLocalFiles: () => void;
   onJumpToExam: (grade: Grade, round: RoundLevel) => void;
+  idActivations: Record<string, IdActivationRecord>;
+  onResetIdActivation: (normalizedId: string) => void;
 }
 
 export const QuestionBankView: React.FC<QuestionBankViewProps> = ({
@@ -47,6 +51,8 @@ export const QuestionBankView: React.FC<QuestionBankViewProps> = ({
   onDeleteLocalFile,
   onClearLocalFiles,
   onJumpToExam,
+  idActivations,
+  onResetIdActivation,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -526,6 +532,83 @@ export const QuestionBankView: React.FC<QuestionBankViewProps> = ({
   }
 ]`}
         </pre>
+      </section>
+
+      {/* Admin-only Activated Student IDs (1-year license tracker) */}
+      <section className="bg-white border-2 border-amber-200 rounded-3xl p-6 space-y-4 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-display text-lg font-bold text-slate-900">
+              Quản lý ID học sinh đã kích hoạt (hạn 1 năm)
+            </h2>
+            <p className="text-xs text-slate-500">
+              Mỗi ID chỉ sử dụng được cho đúng khối lớp tương ứng trong vòng 1 năm kể từ lần đăng nhập đầu tiên.
+            </p>
+          </div>
+          <span className="text-xs font-mono font-semibold text-slate-600 tabular-nums">
+            {Object.keys(idActivations).length} ID đã kích hoạt
+          </span>
+        </div>
+
+        {Object.keys(idActivations).length === 0 ? (
+          <p className="text-xs text-slate-500 bg-slate-50 rounded-xl p-4">
+            Chưa có ID học sinh nào kích hoạt trên thiết bị này.
+          </p>
+        ) : (
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-left border-collapse text-xs sm:text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                  <th className="py-2.5 px-4 font-semibold">ID</th>
+                  <th className="py-2.5 px-4 font-semibold">Khối lớp khóa</th>
+                  <th className="py-2.5 px-4 font-semibold">Ngày kích hoạt</th>
+                  <th className="py-2.5 px-4 font-semibold">Hạn sử dụng</th>
+                  <th className="py-2.5 px-4 font-semibold">Trạng thái</th>
+                  <th className="py-2.5 px-4 font-semibold text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {Object.values(idActivations).map((rec) => {
+                  const st = getActivationStatus(rec);
+                  return (
+                    <tr key={rec.id} className="hover:bg-slate-50/50">
+                      <td className="py-2.5 px-4 font-mono font-bold text-slate-900">
+                        {rec.id}
+                      </td>
+                      <td className="py-2.5 px-4 font-semibold text-slate-700">
+                        Lớp {rec.grade}
+                      </td>
+                      <td className="py-2.5 px-4 font-mono text-slate-600 tabular-nums">
+                        {st?.activatedDateStr}
+                      </td>
+                      <td className="py-2.5 px-4 font-mono text-slate-600 tabular-nums">
+                        {st?.expiresDateStr}
+                      </td>
+                      <td className="py-2.5 px-4 font-semibold">
+                        {st?.isExpired ? (
+                          <span className="text-rose-600">Đã hết hạn</span>
+                        ) : (
+                          <span className="text-emerald-700 tabular-nums">
+                            Còn {st?.daysLeft} ngày
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onResetIdActivation(rec.id)}
+                          className="text-xs font-semibold text-rose-600 hover:text-rose-800 px-2.5 py-1 rounded-lg hover:bg-rose-50"
+                        >
+                          Đặt lại
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </main>
   );
