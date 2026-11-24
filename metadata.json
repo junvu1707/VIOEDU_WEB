@@ -1,0 +1,6 @@
+{
+  "name": "Đấu Trường VioEdu",
+  "description": "Web mô phỏng cuộc thi VioEdu dành cho học sinh từ lớp 1 đến lớp 9 với 5 vòng thi, 4 môn học, 5 dạng câu hỏi tương tác, tự động đồng bộ đề từ GitHub và phân tích lỗi sai chi tiết.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
