@@ -1,6 +1,7 @@
 import { Grade } from '../types/vioedu';
 
 export const ADMIN_ID = 'uyenlp1310';
+export const ACCOUNT_PASS = 'kcopass';
 
 export interface ParsedStudentId {
   isValid: boolean;
@@ -8,6 +9,10 @@ export interface ParsedStudentId {
   grade: Grade | null;
   number: number | null;
   normalized: string;
+}
+
+export function isValidAccountPass(raw: string): boolean {
+  return raw.trim() === ACCOUNT_PASS;
 }
 
 /**

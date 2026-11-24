@@ -39,7 +39,7 @@ import {
   saveStudentId,
   saveStudentName,
 } from './utils/storage';
-import { parseStudentId } from './utils/studentId';
+import { isValidAccountPass, parseStudentId } from './utils/studentId';
 
 interface ActiveExamSession {
   studentName: string;
@@ -58,6 +58,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('setup');
   const [studentName, setStudentName] = useState<string>(() => loadStudentName());
   const [studentId, setStudentId] = useState<string>(() => loadStudentId());
+  const [studentPass, setStudentPass] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('dttt_student_pass_v1') || '';
+    } catch {
+      return '';
+    }
+  });
   const [selectedGrade, setSelectedGrade] = useState<Grade>(() => {
     const initialParsed = parseStudentId(loadStudentId());
     return initialParsed.grade ?? 4;
@@ -66,7 +73,9 @@ export default function App() {
   const [isLocalUploadOpen, setIsLocalUploadOpen] = useState(false);
 
   const parsedId = useMemo(() => parseStudentId(studentId), [studentId]);
-  const isAdmin = parsedId.isAdmin;
+  const isPassValid = useMemo(() => isValidAccountPass(studentPass), [studentPass]);
+  const isAuthenticated = parsedId.isValid && isPassValid;
+  const isAdmin = parsedId.isAdmin && isPassValid;
 
   // Question banks
   const [githubQuestions, setGithubQuestions] = useState<Question[]>([]);
@@ -116,9 +125,9 @@ export default function App() {
     []
   );
 
-  // Automatically load exam bank from GitHub ONLY when a valid ID (l1_001..l9_999 or admin uyenlp1310) is entered
+  // Automatically load exam bank from GitHub ONLY when both ID and Pass are valid
   useEffect(() => {
-    if (parsedId.isValid) {
+    if (isAuthenticated) {
       void performGitHubSync();
     } else {
       setGithubQuestions([]);
@@ -127,10 +136,10 @@ export default function App() {
         status: 'idle',
         filesLoaded: [],
         questionCount: 0,
-        message: 'Nhập đúng ID (l1_001 – l9_999) để tự động tải đề từ GitHub.',
+        message: 'Nhập đúng ID và Pass để tự động tải đề từ GitHub.',
       }));
     }
-  }, [parsedId.isValid, parsedId.normalized, performGitHubSync]);
+  }, [isAuthenticated, parsedId.normalized, performGitHubSync]);
 
   // Ensure non-admin users cannot stay on the Question Bank tab
   useEffect(() => {
@@ -150,6 +159,15 @@ export default function App() {
     const parsed = parseStudentId(nextId);
     if (parsed.grade) {
       setSelectedGrade(parsed.grade);
+    }
+  };
+
+  const handleStudentPassChange = (nextPass: string) => {
+    setStudentPass(nextPass);
+    try {
+      sessionStorage.setItem('dttt_student_pass_v1', nextPass);
+    } catch {
+      // ignore sessionStorage errors
     }
   };
 
@@ -199,7 +217,7 @@ export default function App() {
       grade,
       round,
       subjectFilter: 'all',
-      githubQuestions: parsedId.isValid ? githubQuestions : [],
+      githubQuestions: isAuthenticated ? githubQuestions : [],
       localQuestions,
       sampleGenerator: generateSampleQuestions,
       useTestModeSupplement: true,
@@ -341,6 +359,10 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+    if (!studentName.trim() || !isPassValid || (studentId.trim().length > 0 && !parsedId.isValid)) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     startCompetitionExam();
   };
 
@@ -390,6 +412,8 @@ export default function App() {
           onStudentNameChange={handleStudentNameChange}
           studentId={studentId}
           onStudentIdChange={handleStudentIdChange}
+          studentPass={studentPass}
+          onStudentPassChange={handleStudentPassChange}
           selectedGrade={selectedGrade}
           onSelectGrade={setSelectedGrade}
           selectedRound={selectedRound}

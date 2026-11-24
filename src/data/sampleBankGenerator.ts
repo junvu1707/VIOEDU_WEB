@@ -3,6 +3,7 @@ import {
   Question,
   QuestionType,
   RoundLevel,
+  SUBJECT_ID_CODE,
   SubjectCode,
 } from '../types/vioedu';
 import { shuffleArray } from '../utils/examEngine';
@@ -1160,6 +1161,10 @@ export function generateSampleQuestions(
     if (usedPrompts.has(q.prompt) && (subject === 'toan' || subject === 'toan_tieng_anh')) {
       q = subject === 'toan' ? genMathTN(grade, round, seq + 100) : genMathEnTN(grade, round, seq + 100);
     }
+    q = {
+      ...q,
+      id: `l${grade}_c${round}_${SUBJECT_ID_CODE[q.subject]}__${q.type}_${String(seq).padStart(3, '0')}`,
+    };
     usedPrompts.add(q.prompt);
     questions.push(q);
   }

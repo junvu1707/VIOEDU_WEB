@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
+  Eye,
+  EyeOff,
   FolderUp,
   IdCard,
+  Lock,
   Trophy,
   User,
 } from 'lucide-react';
@@ -14,7 +17,7 @@ import {
   ROUNDS,
   RoundLevel,
 } from '../types/vioedu';
-import { parseStudentId } from '../utils/studentId';
+import { isValidAccountPass, parseStudentId } from '../utils/studentId';
 
 const HERO_IMAGE_PATH = '/src/assets/images/hero_vioedu_arena_1795501207398.jpg';
 
@@ -93,6 +96,8 @@ interface ExamSetupViewProps {
   onStudentNameChange: (name: string) => void;
   studentId: string;
   onStudentIdChange: (id: string) => void;
+  studentPass: string;
+  onStudentPassChange: (pass: string) => void;
   selectedGrade: Grade;
   onSelectGrade: (grade: Grade) => void;
   selectedRound: RoundLevel;
@@ -109,6 +114,8 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
   onStudentNameChange,
   studentId,
   onStudentIdChange,
+  studentPass,
+  onStudentPassChange,
   selectedGrade,
   onSelectGrade,
   selectedRound,
@@ -122,18 +129,23 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
   const [imgFailed, setImgFailed] = useState(false);
   const [nameError, setNameError] = useState(false);
   const [idError, setIdError] = useState(false);
+  const [passError, setPassError] = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
   const parsedId = parseStudentId(studentId);
+  const passValid = isValidAccountPass(studentPass);
   const activeRoundMeta = ROUNDS.find((r) => r.level === selectedRound) || ROUNDS[0];
 
   const handleStartClick = () => {
     const missingName = !studentName.trim();
     const invalidId = studentId.trim().length > 0 && !parsedId.isValid;
+    const invalidPass = !passValid;
 
     setNameError(missingName);
     setIdError(invalidId);
+    setPassError(invalidPass);
 
-    if (missingName || invalidId) {
+    if (missingName || invalidId || invalidPass) {
       return;
     }
     onStartExam();
@@ -154,14 +166,14 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
             </h1>
           </div>
 
-          {/* Step 1: Tên bé & ID */}
+          {/* Step 1: Tên bé, ID & Pass (no example placeholders) */}
           <div className="space-y-2.5">
             <span className="block text-sm font-bold text-slate-800">
               1. Thông tin thí sinh
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
               {/* Tên bé */}
-              <div className="sm:col-span-7 space-y-1.5">
+              <div className="sm:col-span-5 space-y-1.5">
                 <label
                   htmlFor="student-name-input"
                   className="block text-xs font-bold text-sky-700"
@@ -181,8 +193,7 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                       onStudentNameChange(e.target.value);
                       if (nameError && e.target.value.trim()) setNameError(false);
                     }}
-                    placeholder="Ví dụ: Nguyễn Minh Khôi"
-                    className={`w-full pl-10 pr-4 py-3 text-sm sm:text-base bg-sky-50/50 border-2 rounded-2xl text-slate-900 font-medium placeholder:text-slate-400 transition-colors focus:bg-white ${
+                    className={`w-full pl-10 pr-3.5 py-3 text-sm sm:text-base bg-sky-50/50 border-2 rounded-2xl text-slate-900 font-medium transition-colors focus:bg-white ${
                       nameError
                         ? 'border-rose-500 ring-2 ring-rose-100'
                         : 'border-sky-200 focus:border-sky-500'
@@ -191,13 +202,13 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                 </div>
                 {nameError && (
                   <p className="text-xs font-semibold text-rose-600">
-                    Vui lòng nhập tên bé trước khi thi.
+                    Vui lòng nhập tên bé.
                   </p>
                 )}
               </div>
 
               {/* ID */}
-              <div className="sm:col-span-5 space-y-1.5">
+              <div className="sm:col-span-4 space-y-1.5">
                 <label
                   htmlFor="student-id-input"
                   className="block text-xs font-bold text-violet-700"
@@ -217,9 +228,8 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                       onStudentIdChange(e.target.value);
                       if (idError) setIdError(false);
                     }}
-                    placeholder="Ví dụ: l1_001"
                     autoComplete="off"
-                    className={`w-full pl-10 pr-4 py-3 text-sm sm:text-base font-mono bg-violet-50/50 border-2 rounded-2xl text-slate-900 font-bold placeholder:font-sans placeholder:font-normal placeholder:text-slate-400 transition-colors focus:bg-white ${
+                    className={`w-full pl-10 pr-3.5 py-3 text-sm sm:text-base font-mono bg-violet-50/50 border-2 rounded-2xl text-slate-900 font-bold transition-colors focus:bg-white ${
                       idError || (studentId.trim().length > 0 && !parsedId.isValid)
                         ? 'border-rose-400 focus:border-rose-500'
                         : parsedId.isValid
@@ -228,24 +238,75 @@ export const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                     }`}
                   />
                 </div>
-                {parsedId.isValid ? (
+                {parsedId.isValid && passValid ? (
                   <p className="text-xs font-semibold text-emerald-700 inline-flex items-center gap-1">
                     <BadgeCheck className="w-3.5 h-3.5 shrink-0" />
                     <span>
-                      {parsedId.isAdmin
-                        ? 'Đã xác nhận quyền Quản trị'
-                        : `ID hợp lệ · Lớp ${parsedId.grade}`}
+                      {parsedId.isAdmin ? 'Quyền Quản trị' : `Lớp ${parsedId.grade}`}
                     </span>
                   </p>
-                ) : studentId.trim().length > 0 ? (
+                ) : studentId.trim().length > 0 && !parsedId.isValid ? (
                   <p className="text-xs font-semibold text-rose-600">
-                    Nhập đúng dạng l1_001 đến l9_999
+                    ID chưa đúng định dạng.
                   </p>
-                ) : (
-                  <p className="text-xs text-slate-500">
-                    Dạng l1_001 – l9_999
+                ) : null}
+              </div>
+
+              {/* Pass */}
+              <div className="sm:col-span-3 space-y-1.5">
+                <label
+                  htmlFor="student-pass-input"
+                  className="block text-xs font-bold text-amber-700"
+                >
+                  Pass
+                </label>
+                <div className="relative">
+                  <Lock
+                    aria-hidden="true"
+                    className="w-4 h-4 text-amber-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  />
+                  <input
+                    id="student-pass-input"
+                    type={showPass ? 'text' : 'password'}
+                    value={studentPass}
+                    onChange={(e) => {
+                      onStudentPassChange(e.target.value);
+                      if (passError && isValidAccountPass(e.target.value)) {
+                        setPassError(false);
+                      }
+                    }}
+                    autoComplete="current-password"
+                    className={`w-full pl-9 pr-9 py-3 text-sm sm:text-base font-mono bg-amber-50/50 border-2 rounded-2xl text-slate-900 font-bold transition-colors focus:bg-white ${
+                      passError || (studentPass.trim().length > 0 && !passValid)
+                        ? 'border-rose-400 focus:border-rose-500'
+                        : passValid
+                        ? 'border-emerald-400 focus:border-emerald-500'
+                        : 'border-amber-200 focus:border-amber-500'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPass((prev) => !prev)}
+                    aria-label={showPass ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700"
+                  >
+                    {showPass ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                {passError ? (
+                  <p className="text-xs font-semibold text-rose-600">
+                    Sai mật khẩu.
                   </p>
-                )}
+                ) : passValid ? (
+                  <p className="text-xs font-semibold text-emerald-700 inline-flex items-center gap-1">
+                    <BadgeCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span>Hợp lệ</span>
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>

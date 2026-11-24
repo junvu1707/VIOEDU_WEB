@@ -302,7 +302,7 @@ export const QuestionBankView: React.FC<QuestionBankViewProps> = ({
                   <span>Tải nhiều file đề từ máy tính</span>
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Chọn nhiều file .json cùng lúc — tự nhận diện mã ID (vd: l4_c1_tn_0001) để xếp vào đúng Lớp & Vòng.
+                  Chọn nhiều file .json cùng lúc — tự nhận diện mã ID (vd: l1_c1_t__tn_001) để xếp vào đúng Lớp, Môn & Vòng.
                 </p>
               </div>
               {localFiles.length > 0 && (
@@ -467,8 +467,10 @@ export const QuestionBankView: React.FC<QuestionBankViewProps> = ({
               Chuẩn cấu trúc file JSON & Tải file mẫu cho GitHub
             </h2>
             <p className="text-xs sm:text-sm text-slate-600">
-              Quy ước ID: <code className="font-mono font-semibold text-emerald-800">l4_c1_loại_0001</code> — trong đó{' '}
-              <strong className="font-mono">l1..l9</strong> là Lớp, <strong className="font-mono">c1..c5</strong> là Vòng, và loại câu gồm{' '}
+              Quy ước ID: <code className="font-mono font-semibold text-emerald-800">l1_c1_t__tn_001</code> — trong đó{' '}
+              <strong className="font-mono">l1..l9</strong> là Lớp, <strong className="font-mono">c1..c5</strong> là Cấp độ,{' '}
+              <strong className="font-mono">t</strong> (Toán), <strong className="font-mono">tv</strong> (Tiếng Việt),{' '}
+              <strong className="font-mono">tta</strong> (Toán tiếng Anh), <strong className="font-mono">ta</strong> (Tiếng Anh), và loại câu gồm{' '}
               <strong className="font-mono">tn</strong> (trắc nghiệm), <strong className="font-mono">noi</strong> (nối 2 vế),{' '}
               <strong className="font-mono">dt</strong> (điền từ), <strong className="font-mono">sx</strong> (sắp xếp),{' '}
               <strong className="font-mono">chon</strong> (chọn vào giỏ).
@@ -514,8 +516,8 @@ export const QuestionBankView: React.FC<QuestionBankViewProps> = ({
         <pre className="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs font-mono overflow-x-auto leading-relaxed">
 {`[
   {
-    "id": "l${templateGrade}_c${templateRound}_tn_0001",
-    "subject": "toan", // toan | tieng_viet | toan_tieng_anh | tieng_anh
+    "id": "l${templateGrade}_c${templateRound}_t__tn_001",
+    "subject": "toan", // tự nhận diện từ ID: t | tv | tta | ta
     "topic": "Thứ tự thực hiện phép tính",
     "prompt": "Giá trị của biểu thức 125 + 75 × 2 là bao nhiêu?",
     "options": ["400", "275", "250", "350"],

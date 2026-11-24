@@ -62,6 +62,13 @@ export const ROUNDS: RoundConfig[] = [
   },
 ];
 
+export const SUBJECT_ID_CODE: Record<SubjectCode, string> = {
+  toan: 't',
+  tieng_viet: 'tv',
+  toan_tieng_anh: 'tta',
+  tieng_anh: 'ta',
+};
+
 export const SUBJECT_INFO: Record<
   SubjectCode,
   { name: string; shortName: string; accentClass: string; barClass: string }
@@ -141,7 +148,7 @@ export interface BasketItem {
 }
 
 export interface Question {
-  id: string; // e.g., l4_c1_tn_0001
+  id: string; // e.g., l1_c1_t__tn_001
   grade: Grade;
   round: RoundLevel;
   type: QuestionType;

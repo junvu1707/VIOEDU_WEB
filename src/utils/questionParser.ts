@@ -8,41 +8,68 @@ import {
   QuestionType,
   ROUNDS,
   RoundLevel,
+  SUBJECT_ID_CODE,
   SubjectCode,
 } from '../types/vioedu';
 
 export interface ParsedIdMeta {
   grade: Grade | null;
   round: RoundLevel | null;
+  subject: SubjectCode | null;
   type: QuestionType | null;
   sequence: string | null;
 }
 
 const VALID_TYPES: QuestionType[] = ['tn', 'noi', 'dt', 'sx', 'chon'];
 
+const ID_SUBJECT_MAP: Record<string, SubjectCode> = {
+  t: 'toan',
+  tv: 'tieng_viet',
+  tta: 'toan_tieng_anh',
+  ta: 'tieng_anh',
+};
+
 export function parseQuestionId(rawId: string): ParsedIdMeta {
   const cleaned = (rawId || '').trim().toLowerCase();
-  // Primary pattern: l4_c1_tn_0001 (also allows hyphen or extra segments)
-  const fullMatch = cleaned.match(
+
+  // Primary pattern: l1_c1_t__tn_001 (also accepts single underscore between subject & type)
+  const newFormatMatch = cleaned.match(
+    /^l([1-9])[_-]c([1-5])[_-](tta|tv|ta|t)[_-]{1,2}(tn|noi|dt|sx|chon)(?:[_-](\d+))?$/i
+  );
+  if (newFormatMatch) {
+    return {
+      grade: Number(newFormatMatch[1]) as Grade,
+      round: Number(newFormatMatch[2]) as RoundLevel,
+      subject: ID_SUBJECT_MAP[newFormatMatch[3].toLowerCase()] ?? null,
+      type: newFormatMatch[4].toLowerCase() as QuestionType,
+      sequence: newFormatMatch[5] ?? null,
+    };
+  }
+
+  // Legacy pattern fallback: l4_c1_tn_0001
+  const legacyMatch = cleaned.match(
     /l([1-9])[_-]?c([1-5])[_-]?(tn|noi|dt|sx|chon)(?:[_-]?(\d+))?/i
   );
-  if (fullMatch) {
+  if (legacyMatch) {
     return {
-      grade: Number(fullMatch[1]) as Grade,
-      round: Number(fullMatch[2]) as RoundLevel,
-      type: fullMatch[3].toLowerCase() as QuestionType,
-      sequence: fullMatch[4] ?? null,
+      grade: Number(legacyMatch[1]) as Grade,
+      round: Number(legacyMatch[2]) as RoundLevel,
+      subject: null,
+      type: legacyMatch[3].toLowerCase() as QuestionType,
+      sequence: legacyMatch[4] ?? null,
     };
   }
 
   // Partial fallback
   const gradeMatch = cleaned.match(/(?:^|[_-])(?:l|lop|grade|g)([1-9])(?:$|[_-])/i);
   const roundMatch = cleaned.match(/(?:^|[_-])(?:c|cap|vong|round|r)([1-5])(?:$|[_-])/i);
+  const subjMatch = cleaned.match(/(?:^|[_-])(tta|tv|ta|t)(?:$|[_-])/i);
   const typeMatch = cleaned.match(/(?:^|[_-])(tn|noi|dt|sx|chon)(?:$|[_-])/i);
 
   return {
     grade: gradeMatch ? (Number(gradeMatch[1]) as Grade) : null,
     round: roundMatch ? (Number(roundMatch[1]) as RoundLevel) : null,
+    subject: subjMatch ? (ID_SUBJECT_MAP[subjMatch[1].toLowerCase()] ?? null) : null,
     type: typeMatch ? (typeMatch[1].toLowerCase() as QuestionType) : null,
     sequence: null,
   };
@@ -67,13 +94,31 @@ export function inferMetaFromFilename(fileName: string): {
   }
 
   let subject: SubjectCode | null = null;
-  if (lower.includes('toan_ta') || lower.includes('toan_tieng_anh') || lower.includes('math_en') || lower.includes('english_math')) {
+  if (
+    lower.includes('toan_ta') ||
+    lower.includes('toan_tieng_anh') ||
+    lower.includes('math_en') ||
+    lower.includes('english_math') ||
+    /(?:^|[_-])tta(?:$|[_.-])/.test(lower)
+  ) {
     subject = 'toan_tieng_anh';
-  } else if (lower.includes('tieng_anh') || lower.includes('english') || lower.includes('_ta_') || lower.includes('_en_')) {
+  } else if (
+    lower.includes('tieng_anh') ||
+    lower.includes('english') ||
+    /(?:^|[_-])(?:ta|en)(?:$|[_.-])/.test(lower)
+  ) {
     subject = 'tieng_anh';
-  } else if (lower.includes('tieng_viet') || lower.includes('vietnamese') || lower.includes('_tv_')) {
+  } else if (
+    lower.includes('tieng_viet') ||
+    lower.includes('vietnamese') ||
+    /(?:^|[_-])tv(?:$|[_.-])/.test(lower)
+  ) {
     subject = 'tieng_viet';
-  } else if (lower.includes('toan') || lower.includes('math')) {
+  } else if (
+    lower.includes('toan') ||
+    lower.includes('math') ||
+    /(?:^|[_-])t(?:$|[_.-])/.test(lower)
+  ) {
     subject = 'toan';
   }
 
@@ -94,6 +139,7 @@ export function normalizeSubject(raw: unknown, fallback?: SubjectCode | null): S
       .replace(/đ/g, 'd');
 
     if (
+      s === 'tta' ||
       s.includes('toan bang tieng anh') ||
       s.includes('toan tieng anh') ||
       s === 'toan_tieng_anh' ||
@@ -103,13 +149,13 @@ export function normalizeSubject(raw: unknown, fallback?: SubjectCode | null): S
     ) {
       return 'toan_tieng_anh';
     }
-    if (s.includes('tieng viet') || s === 'tieng_viet' || s === 'tv' || s.includes('vietnamese')) {
+    if (s === 'tv' || s.includes('tieng viet') || s === 'tieng_viet' || s.includes('vietnamese')) {
       return 'tieng_viet';
     }
-    if (s.includes('tieng anh') || s === 'tieng_anh' || s === 'ta' || s === 'en' || s.includes('english')) {
+    if (s === 'ta' || s === 'en' || s.includes('tieng anh') || s === 'tieng_anh' || s.includes('english')) {
       return 'tieng_anh';
     }
-    if (s.includes('toan') || s.includes('math')) {
+    if (s === 't' || s.includes('toan') || s.includes('math')) {
       return 'toan';
     }
   }
@@ -207,11 +253,11 @@ export function parseQuestionsPayload(
     const grade = idMeta.grade ?? toGrade(rec.grade ?? rec.lop) ?? rootGrade ?? 4;
     const round = idMeta.round ?? toRound(rec.round ?? rec.cap ?? rec.vong) ?? rootRound ?? 1;
     const type = normalizeQuestionType(rec.type ?? rec.loai ?? rec.loai_cau, rec, idMeta.type);
-    const subject = normalizeSubject(rec.subject ?? rec.mon ?? rec.mon_hoc, rootSubject);
+    const subject = idMeta.subject ?? normalizeSubject(rec.subject ?? rec.mon ?? rec.mon_hoc, rootSubject);
 
     const id =
       rawId ||
-      `l${grade}_c${round}_${type}_${String(index + 1).padStart(4, '0')}`;
+      `l${grade}_c${round}_${SUBJECT_ID_CODE[subject]}__${type}_${String(index + 1).padStart(3, '0')}`;
 
     const prompt = String(
       rec.prompt ?? rec.question ?? rec.noi_dung ?? rec.cau_hoi ?? rec.text ?? ''
@@ -419,7 +465,7 @@ export function generateSampleJsonTemplate(grade: Grade, round: RoundLevel): str
   const prefix = `l${grade}_c${round}`;
   const sample = [
     {
-      id: `${prefix}_tn_0001`,
+      id: `${prefix}_t__tn_001`,
       subject: 'toan',
       topic: 'Phép tính số tự nhiên',
       prompt: `Giá trị của biểu thức 125 + 75 × 2 là bao nhiêu?`,
@@ -428,7 +474,7 @@ export function generateSampleJsonTemplate(grade: Grade, round: RoundLevel): str
       explanation: 'Thực hiện phép nhân trước, cộng sau: 75 × 2 = 150, sau đó 125 + 150 = 275.',
     },
     {
-      id: `${prefix}_noi_0002`,
+      id: `${prefix}_tv__noi_002`,
       subject: 'tieng_viet',
       topic: 'Từ đồng nghĩa và trái nghĩa',
       prompt: 'Nối mỗi từ ở cột trái với từ trái nghĩa tương ứng ở cột phải:',
@@ -440,7 +486,7 @@ export function generateSampleJsonTemplate(grade: Grade, round: RoundLevel): str
       explanation: 'Chăm chỉ – Lười biếng; Dũng cảm – Hèn nhát; Đoàn kết – Chia rẽ là các cặp từ trái nghĩa.',
     },
     {
-      id: `${prefix}_dt_0003`,
+      id: `${prefix}_tta__dt_003`,
       subject: 'toan_tieng_anh',
       topic: 'Arithmetic in English',
       prompt: 'A rectangle has length 12 cm and width 5 cm. Its perimeter is ___ cm.',
@@ -448,7 +494,7 @@ export function generateSampleJsonTemplate(grade: Grade, round: RoundLevel): str
       explanation: 'Perimeter = (length + width) × 2 = (12 + 5) × 2 = 34 cm.',
     },
     {
-      id: `${prefix}_sx_0004`,
+      id: `${prefix}_ta__sx_004`,
       subject: 'tieng_anh',
       topic: 'Sentence Structure',
       prompt: 'Sắp xếp các từ sau thành câu tiếng Anh hoàn chỉnh:',
@@ -458,7 +504,7 @@ export function generateSampleJsonTemplate(grade: Grade, round: RoundLevel): str
       explanation: 'Cấu trúc thì hiện tại đơn: Chủ ngữ (She) + động từ (reads) + tân ngữ (books) + trạng ngữ thời gian (every evening.).',
     },
     {
-      id: `${prefix}_chon_0005`,
+      id: `${prefix}_t__chon_005`,
       subject: 'toan',
       topic: 'Số chẵn và số lẻ',
       prompt: 'Chọn từng số và xếp vào đúng giỏ Số chẵn hoặc Số lẻ:',
